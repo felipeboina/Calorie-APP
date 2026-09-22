@@ -1,36 +1,53 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# CalorieGO
 
-## Getting Started
+App web (PWA) para controlar calorias consumidas e gastas no dia. Registre
+alimentos (com busca em base própria ou foto + IA), acompanhe seu peso,
+e veja se bateu a meta do dia — no estilo de um jogo (streak, anéis de
+progresso, barras de macro).
 
-First, run the development server:
+## Stack
+
+- Next.js 16 (App Router) + React 19 + TypeScript
+- Tailwind CSS 4
+- Supabase (Auth, Postgres, Storage) — projeto `calorias-app`
+- Anthropic Claude (análise de fotos de alimentos) — opcional
+- Recharts (gráficos de peso e calorias)
+
+## Rodando localmente
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Abra http://localhost:3000 (ou a porta configurada).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Variáveis de ambiente
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Copie `.env.example` para `.env.local` e preencha:
 
-## Learn More
+- `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` — já
+  configurados no `.env.local` deste projeto (projeto Supabase
+  `calorias-app`).
+- `ANTHROPIC_API_KEY` — necessária apenas para o botão "Analisar com IA"
+  na tela de registro de alimento. Sem ela, o app funciona normalmente
+  (busca manual + cadastro manual continuam disponíveis); a rota
+  `/api/analyze-food` retorna erro 503 informando que a IA está
+  indisponível. Gere uma chave em https://console.anthropic.com/settings/keys.
 
-To learn more about Next.js, take a look at the following resources:
+## Estrutura
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- `src/app` — páginas (login, signup, onboarding, dashboard, diário,
+  progresso, perfil) e a rota de API de análise de foto.
+- `src/lib` — clientes Supabase, cálculo de TMB/meta calórica (Mifflin-St
+  Jeor) e queries reutilizáveis.
+- `src/components` — UI (anel de progresso, barras de macro, gráficos,
+  navegação inferior).
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Banco de dados
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Tabelas: `profiles`, `weight_logs`, `foods` (base de alimentos, ~67 itens
+pré-cadastrados), `food_logs`, `exercise_logs`. Todas com RLS: cada
+usuário só acessa seus próprios dados; `foods` é de leitura pública.
+Fotos ficam em um bucket privado (`food-photos`), com URLs assinadas
+geradas sob demanda.
