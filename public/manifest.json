@@ -1,0 +1,18 @@
+{
+  "name": "CalorieGO - Diário Calórico",
+  "short_name": "CalorieGO",
+  "description": "Controle suas calorias, fotografe suas refeições e bata sua meta todos os dias.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0a0a",
+  "theme_color": "#10b981",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
