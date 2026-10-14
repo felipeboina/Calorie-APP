@@ -38,6 +38,12 @@ Copie `.env.example` para `.env.local` e preencha:
   enviado (as fotos) para melhorar seus produtos.
 - `GEMINI_MODEL` (opcional) — modelos separados por vírgula, tentados em ordem (padrão: `gemini-3.8-flash`, `gemini-3.5-flash-lite`, `gemini-3-flash-preview`); troque por outro
   modelo com cota gratuita se esse for descontinuado.
+- `USDA_API_KEY` (recomendada) — usada em "Descrever os ingredientes e calcular":
+  o Gemini separa os ingredientes e converte medidas caseiras em gramas, e o app
+  consulta cada um no USDA FoodData Central (banco público de nutrição, gratuito).
+  Sem chave própria vale a `DEMO_KEY`, limitada a ~10 consultas por hora; quando o
+  limite estoura, o app usa a estimativa da IA e avisa na tela. Peça uma chave
+  gratuita em https://fdc.nal.usda.gov/api-key-signup.html (chega por e-mail).
 
 ## Custos
 

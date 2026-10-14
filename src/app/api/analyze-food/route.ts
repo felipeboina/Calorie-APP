@@ -1,12 +1,8 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { gerarConteudo, textoDaResposta } from "@/lib/gemini";
 
 export const maxDuration = 30;
-
-// Tentados em ordem; passa para o próximo se o modelo estiver sobrecarregado (503) ou descontinuado (404)
-const MODELOS = process.env.GEMINI_MODEL
-  ? process.env.GEMINI_MODEL.split(",").map((m) => m.trim())
-  : ["gemini-3.8-flash", "gemini-3.5-flash-lite", "gemini-3-flash-preview"];
 
 const PROMPT = `Analise essa foto de comida. Identifique o(s) alimento(s) principal(is) e estime a porção visível.
 Os valores de calorias e macros devem ser referentes à porção TOTAL estimada na foto, não por 100g.
@@ -61,7 +57,7 @@ export async function POST(request: Request) {
   }
 
   try {
-    const body = JSON.stringify({
+    const res = await gerarConteudo({
       contents: [
         {
           parts: [
@@ -75,22 +71,6 @@ export async function POST(request: Request) {
         response_schema: RESPONSE_SCHEMA,
       },
     });
-
-    let res: Response | null = null;
-    for (const modelo of MODELOS) {
-      res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-goog-api-key": process.env.GEMINI_API_KEY,
-          },
-          body,
-        }
-      );
-      if (res.status !== 503 && res.status !== 404) break;
-    }
 
     if (!res) {
       return NextResponse.json({ error: "Falha ao analisar a imagem." }, { status: 502 });
@@ -118,10 +98,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const data = await res.json();
-    const parts: { text?: string }[] =
-      data?.candidates?.[0]?.content?.parts ?? [];
-    const raw = parts.map((p) => p.text ?? "").join("");
+    const raw = textoDaResposta(await res.json());
 
     try {
       return NextResponse.json(JSON.parse(raw));

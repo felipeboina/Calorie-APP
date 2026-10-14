@@ -82,6 +82,17 @@ export interface ExerciseLog {
   created_at: string;
 }
 
+export interface IngredienteCalculado {
+  nome: string;
+  quantidade_g: number;
+  calorias_100g: number;
+  proteina_100g: number;
+  carboidrato_100g: number;
+  gordura_100g: number;
+  fonte: "usda" | "ia";
+  fonte_descricao: string;
+}
+
 export const REFEICAO_LABELS: Record<Refeicao, string> = {
   cafe_da_manha: "Café da manhã",
   almoco: "Almoço",

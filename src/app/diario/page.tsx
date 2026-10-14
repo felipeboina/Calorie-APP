@@ -7,7 +7,13 @@ import { createClient } from "@/lib/supabase/client";
 import { hojeBR } from "@/lib/datas";
 import { comprimirImagem } from "@/lib/imagem";
 import { BottomNav } from "@/components/bottom-nav";
-import { REFEICAO_LABELS, type Food, type Refeicao } from "@/lib/types";
+import { somarIngredientes } from "@/lib/calculos";
+import {
+  REFEICAO_LABELS,
+  type Food,
+  type IngredienteCalculado,
+  type Refeicao,
+} from "@/lib/types";
 
 function refeicaoAtual(): Refeicao {
   const h = new Date().getHours();
@@ -76,6 +82,11 @@ function FormAlimento({ onSalvo }: { onSalvo: () => void }) {
   const [modoManual, setModoManual] = useState(false);
   const [salvarNaBase, setSalvarNaBase] = useState(true);
   const [usuarioId, setUsuarioId] = useState<string | null>(null);
+  const [entradaNumerica, setEntradaNumerica] = useState(false);
+  const [descricao, setDescricao] = useState("");
+  const [calculando, setCalculando] = useState(false);
+  const [receita, setReceita] = useState<IngredienteCalculado[] | null>(null);
+  const [avisoReceita, setAvisoReceita] = useState<string | null>(null);
 
   const [quantidade, setQuantidade] = useState("100");
   const [nomeManual, setNomeManual] = useState("");
@@ -136,6 +147,54 @@ function FormAlimento({ onSalvo }: { onSalvo: () => void }) {
     setResultados((atual) => atual.filter((f) => f.id !== food.id));
   }
 
+  function aplicarReceita(lista: IngredienteCalculado[]) {
+    const total = somarIngredientes(lista);
+    const um = (n: number) => String(Math.round(n * 10) / 10);
+    setQuantidade(um(total.gramas));
+    setCaloriasManual(um(total.calorias));
+    setProteinaManual(um(total.proteina));
+    setCarboManual(um(total.carboidrato));
+    setGorduraManual(um(total.gordura));
+  }
+
+  function alterarGramas(indice: number, valor: string) {
+    if (!receita) return;
+    const gramas = Math.max(0, Number(valor) || 0);
+    const nova = receita.map((ing, i) => (i === indice ? { ...ing, quantidade_g: gramas } : ing));
+    setReceita(nova);
+    aplicarReceita(nova);
+  }
+
+  async function calcularReceita() {
+    setErro(null);
+    setAvisoReceita(null);
+    if (descricao.trim().length < 3) {
+      setErro("Descreva o que leva no alimento.");
+      return;
+    }
+    setCalculando(true);
+    try {
+      const res = await fetch("/api/calcular-receita", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ descricao }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setErro(data.error ?? "Não foi possível calcular os valores.");
+        return;
+      }
+      setReceita(data.ingredientes);
+      setAvisoReceita(data.aviso ?? null);
+      if (!nomeManual.trim() && data.nome_sugerido) setNomeManual(data.nome_sugerido);
+      aplicarReceita(data.ingredientes);
+    } catch {
+      setErro("Não foi possível calcular os valores. Tente novamente.");
+    } finally {
+      setCalculando(false);
+    }
+  }
+
   function limparSelecao() {
     setFoodSelecionado(null);
     setBusca("");
@@ -172,6 +231,8 @@ function FormAlimento({ onSalvo }: { onSalvo: () => void }) {
       setModoManual(true);
       setFoodSelecionado(null);
       setSalvarNaBase(false);
+      setEntradaNumerica(true);
+      setReceita(null);
       setNomeManual(data.nome_alimento ?? "");
       setQuantidade(String(data.quantidade_g_estimada ?? 100));
       setCaloriasManual(String(data.calorias ?? ""));
@@ -251,6 +312,7 @@ function FormAlimento({ onSalvo }: { onSalvo: () => void }) {
         carboidrato_100g: por100(carboManual),
         gordura_100g: por100(gorduraManual),
         porcao_padrao_g: qtd,
+        porcao_padrao_desc: receita && !entradaNumerica ? descricao.trim().slice(0, 200) : null,
         fonte: "usuario",
         created_by: user.id,
       };
@@ -332,6 +394,9 @@ function FormAlimento({ onSalvo }: { onSalvo: () => void }) {
   }
 
   const totaisPreview = calcularTotaisPreview();
+  const modoDescricao = modoManual && !foodSelecionado && !entradaNumerica;
+  const aguardandoCalculo = modoDescricao && !receita;
+  const quantidadeTravada = modoDescricao && !!receita;
   const qtdNum = Number(quantidade) || 0;
   const kcalPor100g =
     qtdNum > 0 ? Math.round(((Number(caloriasManual) || 0) * 100) / qtdNum) : 0;
@@ -467,31 +532,114 @@ function FormAlimento({ onSalvo }: { onSalvo: () => void }) {
                 placeholder="Nome do alimento"
                 className="w-full rounded-xl border border-neutral-800 bg-neutral-950 px-4 py-2.5 text-sm text-neutral-100 outline-none focus:border-emerald-500"
               />
-              <p className="text-xs text-neutral-500">
-                Informe os valores para a quantidade em gramas logo abaixo.
-              </p>
-              <div className="grid grid-cols-2 gap-3">
-                <LabeledInput
-                  label="Calorias (porção)"
-                  value={caloriasManual}
-                  onChange={setCaloriasManual}
-                />
-                <LabeledInput
-                  label="Proteína (g)"
-                  value={proteinaManual}
-                  onChange={setProteinaManual}
-                />
-                <LabeledInput
-                  label="Carboidrato (g)"
-                  value={carboManual}
-                  onChange={setCarboManual}
-                />
-                <LabeledInput
-                  label="Gordura (g)"
-                  value={gorduraManual}
-                  onChange={setGorduraManual}
-                />
-              </div>
+              {entradaNumerica ? (
+                <>
+                  <p className="text-xs text-neutral-500">
+                    Informe os valores para a quantidade em gramas logo abaixo.
+                  </p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <LabeledInput
+                      label="Calorias (porção)"
+                      value={caloriasManual}
+                      onChange={setCaloriasManual}
+                    />
+                    <LabeledInput
+                      label="Proteína (g)"
+                      value={proteinaManual}
+                      onChange={setProteinaManual}
+                    />
+                    <LabeledInput
+                      label="Carboidrato (g)"
+                      value={carboManual}
+                      onChange={setCarboManual}
+                    />
+                    <LabeledInput
+                      label="Gordura (g)"
+                      value={gorduraManual}
+                      onChange={setGorduraManual}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setEntradaNumerica(false)}
+                    className="text-left text-xs text-emerald-400 underline"
+                  >
+                    Descrever os ingredientes e calcular automaticamente
+                  </button>
+                </>
+              ) : (
+                <>
+                  <div>
+                    <label className="mb-1 block text-xs text-neutral-400">
+                      O que tem nesse alimento?
+                    </label>
+                    <textarea
+                      value={descricao}
+                      onChange={(e) => setDescricao(e.target.value)}
+                      rows={3}
+                      maxLength={300}
+                      placeholder="ex: 2 ovos, 50 g de tomate, 50 g de cebola e 5 g de óleo"
+                      className="w-full resize-none rounded-xl border border-neutral-800 bg-neutral-950 px-4 py-2.5 text-sm text-neutral-100 outline-none focus:border-emerald-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={calcularReceita}
+                      disabled={calculando}
+                      className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-500/40 bg-emerald-500/10 py-2.5 text-sm font-semibold text-emerald-300 disabled:opacity-60"
+                    >
+                      {calculando ? (
+                        <Loader2 size={16} className="animate-spin" />
+                      ) : (
+                        <Sparkles size={16} />
+                      )}
+                      {calculando
+                        ? "Pesquisando valores..."
+                        : receita
+                        ? "Recalcular"
+                        : "Calcular valores nutricionais"}
+                    </button>
+                  </div>
+
+                  {avisoReceita && <p className="text-xs text-amber-400">{avisoReceita}</p>}
+
+                  {receita && (
+                    <div className="flex flex-col gap-2 rounded-xl bg-neutral-950 p-3">
+                      {receita.map((ing, i) => (
+                        <div key={i} className="flex items-center gap-2 text-xs">
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-neutral-100">{ing.nome}</p>
+                            <p className="truncate text-[10px] text-neutral-500">
+                              {ing.fonte === "usda"
+                                ? `USDA: ${ing.fonte_descricao}`
+                                : "Estimativa da IA"}{" "}
+                              · {Math.round(ing.calorias_100g)} kcal/100 g
+                            </p>
+                          </div>
+                          <input
+                            type="number"
+                            value={ing.quantidade_g}
+                            onChange={(e) => alterarGramas(i, e.target.value)}
+                            aria-label={`Gramas de ${ing.nome}`}
+                            className="w-16 rounded-lg border border-neutral-800 bg-neutral-900 px-2 py-1 text-right text-xs text-neutral-100 outline-none focus:border-emerald-500"
+                          />
+                          <span className="text-neutral-500">g</span>
+                          <span className="w-16 text-right font-semibold text-neutral-200">
+                            {Math.round((ing.calorias_100g * ing.quantidade_g) / 100)} kcal
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => setEntradaNumerica(true)}
+                    className="text-left text-xs text-neutral-500 underline"
+                  >
+                    Prefiro informar calorias e macros manualmente
+                  </button>
+                </>
+              )}
               <label className="flex items-start gap-2 text-xs text-neutral-300">
                 <input
                   type="checkbox"
@@ -508,18 +656,24 @@ function FormAlimento({ onSalvo }: { onSalvo: () => void }) {
             </div>
           )}
 
+          {!aguardandoCalculo && (
           <div className="mb-3">
             <label className="mb-1 block text-xs text-neutral-400">
-              Quantidade (g)
+              {quantidadeTravada ? "Peso total dos ingredientes (g)" : "Quantidade (g)"}
             </label>
             <input
               type="number"
               value={quantidade}
               onChange={(e) => setQuantidade(e.target.value)}
-              className="w-full rounded-xl border border-neutral-800 bg-neutral-950 px-4 py-2.5 text-sm text-neutral-100 outline-none focus:border-emerald-500"
+              readOnly={quantidadeTravada}
+              className={`w-full rounded-xl border border-neutral-800 bg-neutral-950 px-4 py-2.5 text-sm outline-none focus:border-emerald-500 ${
+                quantidadeTravada ? "text-neutral-500" : "text-neutral-100"
+              }`}
             />
           </div>
+          )}
 
+          {!aguardandoCalculo && (
           <div className="grid grid-cols-4 gap-2 rounded-xl bg-neutral-950 p-3 text-center text-xs">
             <div>
               <p className="font-semibold text-neutral-100">
@@ -546,6 +700,7 @@ function FormAlimento({ onSalvo }: { onSalvo: () => void }) {
               <p className="text-neutral-500">gord</p>
             </div>
           </div>
+          )}
         </div>
       )}
 

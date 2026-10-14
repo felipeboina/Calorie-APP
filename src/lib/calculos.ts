@@ -1,4 +1,20 @@
-import type { NivelAtividade, Objetivo, Sexo } from "./types";
+import type { IngredienteCalculado, NivelAtividade, Objetivo, Sexo } from "./types";
+
+export function somarIngredientes(lista: IngredienteCalculado[]) {
+  return lista.reduce(
+    (acc, i) => {
+      const fator = i.quantidade_g / 100;
+      return {
+        gramas: acc.gramas + i.quantidade_g,
+        calorias: acc.calorias + i.calorias_100g * fator,
+        proteina: acc.proteina + i.proteina_100g * fator,
+        carboidrato: acc.carboidrato + i.carboidrato_100g * fator,
+        gordura: acc.gordura + i.gordura_100g * fator,
+      };
+    },
+    { gramas: 0, calorias: 0, proteina: 0, carboidrato: 0, gordura: 0 }
+  );
+}
 
 const FATOR_ATIVIDADE: Record<NivelAtividade, number> = {
   sedentario: 1.2,

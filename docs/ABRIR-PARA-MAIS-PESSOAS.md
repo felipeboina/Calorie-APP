@@ -47,7 +47,18 @@ Quando alguém cadastra um alimento que não existe na busca, ele vai para a tab
 - Excluir um alimento não apaga o histórico de quem já registrou (o diário guarda os valores).
 - Alimentos estimados pela IA **não** vão para a base por padrão (a caixa vem desmarcada).
 
+Cadastro por ingredientes: o usuário descreve o que leva (ex: "2 ovos, 50 g de tomate,
+5 g de óleo"), o Gemini separa os ingredientes e converte para gramas, cada um é
+consultado no USDA FoodData Central (rota `/api/calcular-receita`) e o código soma
+tudo. Se o USDA não achar (ou o limite acabar), usa a estimativa da IA e avisa.
+A pesquisa na web do próprio Gemini (Google Search) **não** está disponível no plano
+gratuito (erro 429), por isso a fonte é o USDA. Os valores são de ingredientes crus,
+em inglês no USDA, então pequenas diferenças em relação à tabela TACO são normais.
+
 O que falta antes de ter muita gente usando:
+
+- **Chave própria do USDA** (`USDA_API_KEY`, grátis): a `DEMO_KEY` aceita ~10 consultas
+  por hora para o servidor inteiro, o que não serve para vários usuários.
 
 - **Moderação**: hoje um valor errado (ou de má-fé) fica visível para todos, e só quem
   criou consegue apagar. Falta um botão "reportar" e um papel de administrador para
