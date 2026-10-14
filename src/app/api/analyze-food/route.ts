@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
-const MODEL = process.env.GEMINI_MODEL ?? "gemini-2.5-flash";
+// Tentados em ordem; passa para o próximo se o modelo estiver sobrecarregado (503) ou descontinuado (404)
+const MODELOS = process.env.GEMINI_MODEL
+  ? process.env.GEMINI_MODEL.split(",").map((m) => m.trim())
+  : ["gemini-3.8-flash", "gemini-3.5-flash-lite", "gemini-3-flash-preview"];
 
 const PROMPT = `Analise essa foto de comida. Identifique o(s) alimento(s) principal(is) e estime a porção visível.
 Os valores de calorias e macros devem ser referentes à porção TOTAL estimada na foto, não por 100g.
@@ -56,30 +59,47 @@ export async function POST(request: Request) {
   }
 
   try {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-goog-api-key": process.env.GEMINI_API_KEY,
-        },
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [
-                { text: PROMPT },
-                { inline_data: { mime_type: mediaType, data: imageBase64 } },
-              ],
-            },
+    const body = JSON.stringify({
+      contents: [
+        {
+          parts: [
+            { text: PROMPT },
+            { inline_data: { mime_type: mediaType, data: imageBase64 } },
           ],
-          generationConfig: {
-            response_mime_type: "application/json",
-            response_schema: RESPONSE_SCHEMA,
+        },
+      ],
+      generationConfig: {
+        response_mime_type: "application/json",
+        response_schema: RESPONSE_SCHEMA,
+      },
+    });
+
+    let res: Response | null = null;
+    for (const modelo of MODELOS) {
+      res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${modelo}:generateContent`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-goog-api-key": process.env.GEMINI_API_KEY,
           },
-        }),
-      }
-    );
+          body,
+        }
+      );
+      if (res.status !== 503 && res.status !== 404) break;
+    }
+
+    if (!res) {
+      return NextResponse.json({ error: "Falha ao analisar a imagem." }, { status: 502 });
+    }
+
+    if (res.status === 503) {
+      return NextResponse.json(
+        { error: "A IA gratuita está sobrecarregada agora. Tente de novo em instantes." },
+        { status: 503 }
+      );
+    }
 
     if (res.status === 429) {
       return NextResponse.json(

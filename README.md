@@ -36,7 +36,7 @@ Copie `.env.example` para `.env.local` e preencha:
   indisponível. Gere uma chave gratuita em https://aistudio.google.com/apikey.
   Atenção: no plano gratuito do Gemini o Google pode usar o conteúdo
   enviado (as fotos) para melhorar seus produtos.
-- `GEMINI_MODEL` (opcional) — padrão `gemini-2.5-flash`; troque por outro
+- `GEMINI_MODEL` (opcional) — modelos separados por vírgula, tentados em ordem (padrão: `gemini-3.8-flash`, `gemini-3.5-flash-lite`, `gemini-3-flash-preview`); troque por outro
   modelo com cota gratuita se esse for descontinuado.
 
 ## Custos
