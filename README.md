@@ -10,7 +10,7 @@ progresso, barras de macro).
 - Next.js 16 (App Router) + React 19 + TypeScript
 - Tailwind CSS 4
 - Supabase (Auth, Postgres, Storage) — projeto `calorias-app`
-- Anthropic Claude (análise de fotos de alimentos) — opcional
+- Google Gemini, plano gratuito (análise de fotos de alimentos) — opcional
 - Recharts (gráficos de peso e calorias)
 
 ## Rodando localmente
@@ -29,11 +29,21 @@ Copie `.env.example` para `.env.local` e preencha:
 - `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` — já
   configurados no `.env.local` deste projeto (projeto Supabase
   `calorias-app`).
-- `ANTHROPIC_API_KEY` — necessária apenas para o botão "Analisar com IA"
+- `GEMINI_API_KEY` — necessária apenas para o botão "Analisar com IA"
   na tela de registro de alimento. Sem ela, o app funciona normalmente
   (busca manual + cadastro manual continuam disponíveis); a rota
   `/api/analyze-food` retorna erro 503 informando que a IA está
-  indisponível. Gere uma chave em https://console.anthropic.com/settings/keys.
+  indisponível. Gere uma chave gratuita em https://aistudio.google.com/apikey.
+  Atenção: no plano gratuito do Gemini o Google pode usar o conteúdo
+  enviado (as fotos) para melhorar seus produtos.
+- `GEMINI_MODEL` (opcional) — padrão `gemini-2.5-flash`; troque por outro
+  modelo com cota gratuita se esse for descontinuado.
+
+## Custos
+
+Tudo roda no plano gratuito: Supabase free (banco, auth, storage), Gemini
+free (IA) e Vercel Hobby para deploy. O Supabase free pausa o projeto após
+~1 semana sem uso (basta reativar no painel).
 
 ## Estrutura
 

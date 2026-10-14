@@ -1,6 +1,33 @@
 import { NextResponse } from "next/server";
-import Anthropic from "@anthropic-ai/sdk";
 import { createClient } from "@/lib/supabase/server";
+
+const MODEL = process.env.GEMINI_MODEL ?? "gemini-2.5-flash";
+
+const PROMPT = `Analise essa foto de comida. Identifique o(s) alimento(s) principal(is) e estime a porção visível.
+Os valores de calorias e macros devem ser referentes à porção TOTAL estimada na foto, não por 100g.
+Se não for possível identificar comida na imagem, use nome_alimento "não identificado" e todos os valores numéricos 0.`;
+
+const RESPONSE_SCHEMA = {
+  type: "OBJECT",
+  properties: {
+    nome_alimento: { type: "STRING" },
+    quantidade_g_estimada: { type: "NUMBER" },
+    calorias: { type: "NUMBER" },
+    proteina_g: { type: "NUMBER" },
+    carboidrato_g: { type: "NUMBER" },
+    gordura_g: { type: "NUMBER" },
+    confianca: { type: "STRING", enum: ["alta", "media", "baixa"] },
+  },
+  required: [
+    "nome_alimento",
+    "quantidade_g_estimada",
+    "calorias",
+    "proteina_g",
+    "carboidrato_g",
+    "gordura_g",
+    "confianca",
+  ],
+};
 
 export async function POST(request: Request) {
   const supabase = await createClient();
@@ -12,11 +39,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Não autenticado." }, { status: 401 });
   }
 
-  if (!process.env.ANTHROPIC_API_KEY) {
+  if (!process.env.GEMINI_API_KEY) {
     return NextResponse.json(
       {
         error:
-          "Análise por IA indisponível: ANTHROPIC_API_KEY não configurada no servidor.",
+          "Análise por IA indisponível: GEMINI_API_KEY não configurada no servidor.",
       },
       { status: 503 }
     );
@@ -28,49 +55,60 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Imagem ausente." }, { status: 400 });
   }
 
-  const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-
   try {
-    const message = await anthropic.messages.create({
-      model: "claude-sonnet-5",
-      max_tokens: 500,
-      messages: [
-        {
-          role: "user",
-          content: [
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": process.env.GEMINI_API_KEY,
+        },
+        body: JSON.stringify({
+          contents: [
             {
-              type: "image",
-              source: {
-                type: "base64",
-                media_type: mediaType,
-                data: imageBase64,
-              },
-            },
-            {
-              type: "text",
-              text: `Analise essa foto de comida. Identifique o(s) alimento(s) principal(is) e estime a porção visível.
-Responda APENAS com um JSON válido, sem markdown, no formato exato:
-{"nome_alimento": "string curta em português", "quantidade_g_estimada": numero, "calorias": numero, "proteina_g": numero, "carboidrato_g": numero, "gordura_g": numero, "confianca": "alta" | "media" | "baixa"}
-Os valores de calorias e macros devem ser referentes à porção TOTAL estimada na foto, não por 100g. Se não for possível identificar comida na imagem, responda com nome_alimento "não identificado" e todos os valores numéricos 0.`,
+              parts: [
+                { text: PROMPT },
+                { inline_data: { mime_type: mediaType, data: imageBase64 } },
+              ],
             },
           ],
-        },
-      ],
-    });
+          generationConfig: {
+            response_mime_type: "application/json",
+            response_schema: RESPONSE_SCHEMA,
+          },
+        }),
+      }
+    );
 
-    const textBlock = message.content.find((b) => b.type === "text");
-    const raw = textBlock && "text" in textBlock ? textBlock.text : "";
+    if (res.status === 429) {
+      return NextResponse.json(
+        { error: "Limite gratuito da IA atingido. Tente de novo em alguns minutos." },
+        { status: 429 }
+      );
+    }
 
-    const jsonMatch = raw.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
+    if (!res.ok) {
+      console.error("Gemini error", res.status, await res.text());
+      return NextResponse.json(
+        { error: "Falha ao analisar a imagem." },
+        { status: 502 }
+      );
+    }
+
+    const data = await res.json();
+    const parts: { text?: string }[] =
+      data?.candidates?.[0]?.content?.parts ?? [];
+    const raw = parts.map((p) => p.text ?? "").join("");
+
+    try {
+      return NextResponse.json(JSON.parse(raw));
+    } catch {
       return NextResponse.json(
         { error: "Não foi possível interpretar a resposta da IA." },
         { status: 502 }
       );
     }
-
-    const resultado = JSON.parse(jsonMatch[0]);
-    return NextResponse.json(resultado);
   } catch (err) {
     console.error(err);
     return NextResponse.json(
