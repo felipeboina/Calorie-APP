@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Camera, Loader2, Search, Sparkles, X } from "lucide-react";
+import { Camera, Loader2, Search, Sparkles, Trash2, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { hojeBR } from "@/lib/datas";
 import { comprimirImagem } from "@/lib/imagem";
@@ -16,6 +16,10 @@ function refeicaoAtual(): Refeicao {
   if (h < 18) return "lanche";
   if (h < 22) return "jantar";
   return "outro";
+}
+
+function capitalizar(texto: string) {
+  return texto.charAt(0).toUpperCase() + texto.slice(1);
 }
 
 function DiarioContent() {
@@ -70,6 +74,8 @@ function FormAlimento({ onSalvo }: { onSalvo: () => void }) {
   const [buscando, setBuscando] = useState(false);
   const [foodSelecionado, setFoodSelecionado] = useState<Food | null>(null);
   const [modoManual, setModoManual] = useState(false);
+  const [salvarNaBase, setSalvarNaBase] = useState(true);
+  const [usuarioId, setUsuarioId] = useState<string | null>(null);
 
   const [quantidade, setQuantidade] = useState("100");
   const [nomeManual, setNomeManual] = useState("");
@@ -86,6 +92,12 @@ function FormAlimento({ onSalvo }: { onSalvo: () => void }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    createClient()
+      .auth.getUser()
+      .then(({ data }) => setUsuarioId(data.user?.id ?? null));
+  }, []);
+
+  useEffect(() => {
     const semBusca = !busca.trim() || !!foodSelecionado;
 
     const timeout = setTimeout(async () => {
@@ -99,6 +111,7 @@ function FormAlimento({ onSalvo }: { onSalvo: () => void }) {
         .from("foods")
         .select("*")
         .ilike("nome", `%${busca.trim()}%`)
+        .order("nome")
         .limit(15);
       setResultados((data ?? []) as Food[]);
       setBuscando(false);
@@ -111,6 +124,16 @@ function FormAlimento({ onSalvo }: { onSalvo: () => void }) {
     setBusca(food.nome);
     setResultados([]);
     setModoManual(false);
+  }
+
+  async function excluirFood(food: Food) {
+    if (!window.confirm(`Excluir "${food.nome}" da base? Seu histórico continua salvo.`)) return;
+    const { error } = await createClient().from("foods").delete().eq("id", food.id);
+    if (error) {
+      setErro("Não foi possível excluir o alimento.");
+      return;
+    }
+    setResultados((atual) => atual.filter((f) => f.id !== food.id));
   }
 
   function limparSelecao() {
@@ -148,6 +171,7 @@ function FormAlimento({ onSalvo }: { onSalvo: () => void }) {
 
       setModoManual(true);
       setFoodSelecionado(null);
+      setSalvarNaBase(false);
       setNomeManual(data.nome_alimento ?? "");
       setQuantidade(String(data.quantidade_g_estimada ?? 100));
       setCaloriasManual(String(data.calorias ?? ""));
@@ -186,7 +210,9 @@ function FormAlimento({ onSalvo }: { onSalvo: () => void }) {
 
   async function handleSalvar() {
     setErro(null);
-    const nome = foodSelecionado ? foodSelecionado.nome : nomeManual.trim();
+    const nome = foodSelecionado
+      ? foodSelecionado.nome
+      : capitalizar(nomeManual.trim());
 
     if (!nome) {
       setErro("Informe o nome do alimento.");
@@ -213,6 +239,58 @@ function FormAlimento({ onSalvo }: { onSalvo: () => void }) {
       return;
     }
 
+    let foodId: string | null = foodSelecionado?.id ?? null;
+    if (!foodSelecionado && modoManual && salvarNaBase) {
+      const qtd = Number(quantidade);
+      const por100 = (valor: string) =>
+        Math.round((((Number(valor) || 0) * 100) / qtd) * 10) / 10;
+      const novo = {
+        nome,
+        calorias_100g: por100(caloriasManual),
+        proteina_100g: por100(proteinaManual),
+        carboidrato_100g: por100(carboManual),
+        gordura_100g: por100(gorduraManual),
+        porcao_padrao_g: qtd,
+        fonte: "usuario",
+        created_by: user.id,
+      };
+
+      if (novo.calorias_100g <= 0) {
+        setErro("Para guardar na base, informe as calorias do alimento.");
+        setSalvando(false);
+        return;
+      }
+      if (
+        novo.calorias_100g > 900 ||
+        novo.proteina_100g + novo.carboidrato_100g + novo.gordura_100g > 100.5
+      ) {
+        setErro(
+          "Esses valores não fecham para a quantidade informada (máximo de 900 kcal e 100 g de macros a cada 100 g). Confira as calorias e a quantidade."
+        );
+        setSalvando(false);
+        return;
+      }
+
+      const { data: criado, error: foodError } = await supabase
+        .from("foods")
+        .insert(novo)
+        .select("id")
+        .single();
+
+      if (foodError) {
+        if (foodError.code === "23505") {
+          setErro(`"${nome}" já existe na base. Selecione ele na lista de busca.`);
+          setModoManual(false);
+          setBusca(nome);
+        } else {
+          setErro("Não foi possível guardar o alimento na base. Tente novamente.");
+        }
+        setSalvando(false);
+        return;
+      }
+      foodId = criado.id;
+    }
+
     let fotoPath: string | null = null;
     if (foto) {
       const ext = foto.name.split(".").pop() ?? "jpg";
@@ -230,7 +308,7 @@ function FormAlimento({ onSalvo }: { onSalvo: () => void }) {
 
     const { error: insertError } = await supabase.from("food_logs").insert({
       user_id: user.id,
-      food_id: foodSelecionado?.id ?? null,
+      food_id: foodId,
       nome_alimento: nome,
       quantidade_g: Number(quantidade),
       calorias: totais.calorias,
@@ -254,6 +332,9 @@ function FormAlimento({ onSalvo }: { onSalvo: () => void }) {
   }
 
   const totaisPreview = calcularTotaisPreview();
+  const qtdNum = Number(quantidade) || 0;
+  const kcalPor100g =
+    qtdNum > 0 ? Math.round(((Number(caloriasManual) || 0) * 100) / qtdNum) : 0;
   const podeSalvar =
     (foodSelecionado || (modoManual && nomeManual && caloriasManual)) &&
     Number(quantidade) > 0;
@@ -318,30 +399,48 @@ function FormAlimento({ onSalvo }: { onSalvo: () => void }) {
         {resultados.length > 0 && (
           <ul className="mt-2 max-h-56 overflow-y-auto rounded-xl border border-neutral-800 bg-neutral-900">
             {resultados.map((food) => (
-              <li key={food.id}>
+              <li key={food.id} className="flex items-center hover:bg-neutral-800">
                 <button
                   onClick={() => selecionarFood(food)}
-                  className="flex w-full items-center justify-between px-4 py-3 text-left text-sm hover:bg-neutral-800"
+                  className="flex flex-1 items-center justify-between gap-2 px-4 py-3 text-left text-sm"
                 >
-                  <span>{food.nome}</span>
-                  <span className="text-xs text-neutral-500">
+                  <span>
+                    {food.nome}
+                    {food.fonte === "usuario" && (
+                      <span className="ml-2 rounded bg-emerald-500/10 px-1.5 py-0.5 text-[10px] text-emerald-400">
+                        comunidade
+                      </span>
+                    )}
+                  </span>
+                  <span className="shrink-0 text-xs text-neutral-500">
                     {Math.round(food.calorias_100g)} kcal/100g
                   </span>
                 </button>
+                {usuarioId && food.created_by === usuarioId && (
+                  <button
+                    onClick={() => excluirFood(food)}
+                    aria-label={`Excluir ${food.nome}`}
+                    className="px-3 py-3 text-neutral-500 hover:text-red-400"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                )}
               </li>
             ))}
           </ul>
         )}
 
-        {busca && resultados.length === 0 && !buscando && !foodSelecionado && (
+        {busca.trim() && !buscando && !foodSelecionado && !modoManual && (
           <button
             onClick={() => {
               setModoManual(true);
-              setNomeManual(busca);
+              setNomeManual(busca.trim());
+              setSalvarNaBase(true);
             }}
-            className="mt-2 text-sm font-medium text-emerald-400"
+            className="mt-2 text-left text-sm font-medium text-emerald-400"
           >
-            Não encontrei &quot;{busca}&quot; — cadastrar manualmente
+            {resultados.length > 0 ? "Não é nenhum desses? " : "Não encontrei. "}
+            Cadastrar &quot;{busca.trim()}&quot; como novo alimento
           </button>
         )}
       </div>
@@ -368,6 +467,9 @@ function FormAlimento({ onSalvo }: { onSalvo: () => void }) {
                 placeholder="Nome do alimento"
                 className="w-full rounded-xl border border-neutral-800 bg-neutral-950 px-4 py-2.5 text-sm text-neutral-100 outline-none focus:border-emerald-500"
               />
+              <p className="text-xs text-neutral-500">
+                Informe os valores para a quantidade em gramas logo abaixo.
+              </p>
               <div className="grid grid-cols-2 gap-3">
                 <LabeledInput
                   label="Calorias (porção)"
@@ -390,6 +492,19 @@ function FormAlimento({ onSalvo }: { onSalvo: () => void }) {
                   onChange={setGorduraManual}
                 />
               </div>
+              <label className="flex items-start gap-2 text-xs text-neutral-300">
+                <input
+                  type="checkbox"
+                  checked={salvarNaBase}
+                  onChange={(e) => setSalvarNaBase(e.target.checked)}
+                  className="mt-0.5 accent-emerald-500"
+                />
+                <span>
+                  Guardar na base de alimentos: aparece nas próximas buscas para todos
+                  que usam o app
+                  {salvarNaBase && kcalPor100g > 0 && ` (${kcalPor100g} kcal por 100 g)`}
+                </span>
+              </label>
             </div>
           )}
 

@@ -51,6 +51,7 @@ export interface Food {
   porcao_padrao_g: number | null;
   porcao_padrao_desc: string | null;
   fonte: string;
+  created_by: string | null;
 }
 
 export interface FoodLog {

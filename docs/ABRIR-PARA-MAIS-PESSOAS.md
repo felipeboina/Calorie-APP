@@ -36,6 +36,27 @@ lista o que mudar quando for liberar para outras pessoas.
 - Cadastro de alimentos próprios pelo usuário (a tabela `foods` já aceita, falta a tela)
   e uma base de alimentos maior que os ~68 atuais.
 
+## 3.1. Alimentos da comunidade (já implementado)
+
+Quando alguém cadastra um alimento que não existe na busca, ele vai para a tabela
+`foods` e passa a aparecer para **todos** (com a etiqueta "comunidade"). Regras atuais:
+
+- Cada pessoa só edita/exclui o que ela mesma cadastrou (RLS no banco).
+- Não aceita nome repetido (ignora maiúsculas e espaços) nem valores impossíveis
+  (mais de 900 kcal ou 100 g de macros a cada 100 g).
+- Excluir um alimento não apaga o histórico de quem já registrou (o diário guarda os valores).
+- Alimentos estimados pela IA **não** vão para a base por padrão (a caixa vem desmarcada).
+
+O que falta antes de ter muita gente usando:
+
+- **Moderação**: hoje um valor errado (ou de má-fé) fica visível para todos, e só quem
+  criou consegue apagar. Falta um botão "reportar" e um papel de administrador para
+  corrigir ou remover itens de qualquer pessoa (por enquanto, só pelo SQL do Supabase).
+- **Limite de cadastros por pessoa** (hoje não há limite, dá para lotar a base).
+- **Busca sem acento**: buscar "pao" não acha "Pão". Dá para resolver com a extensão `unaccent`.
+- O identificador de quem criou cada alimento (`created_by`) fica legível para os outros
+  usuários; avaliar se isso é aceitável na política de privacidade.
+
 ## 4. Limites e custos a reavaliar
 
 - **Gemini grátis**: cota compartilhada entre todos os usuários, e o Google pode usar
