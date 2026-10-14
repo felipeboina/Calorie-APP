@@ -4,6 +4,8 @@ import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Camera, Loader2, Search, Sparkles, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
+import { hojeBR } from "@/lib/datas";
+import { comprimirImagem } from "@/lib/imagem";
 import { BottomNav } from "@/components/bottom-nav";
 import { REFEICAO_LABELS, type Food, type Refeicao } from "@/lib/types";
 
@@ -117,9 +119,10 @@ function FormAlimento({ onSalvo }: { onSalvo: () => void }) {
     setQuantidade("100");
   }
 
-  function handleFotoChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  async function handleFotoChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const original = e.target.files?.[0];
+    if (!original) return;
+    const file = await comprimirImagem(original);
     setFoto(file);
     setFotoPreview(URL.createObjectURL(file));
   }
@@ -235,6 +238,7 @@ function FormAlimento({ onSalvo }: { onSalvo: () => void }) {
       carboidrato: totais.carboidrato,
       gordura: totais.gordura,
       refeicao,
+      data: hojeBR(),
       foto_url: fotoPath,
       fonte: foodSelecionado ? "base" : foto ? "ia" : "manual",
     });
@@ -549,6 +553,7 @@ function FormExercicio({ onSalvo }: { onSalvo: () => void }) {
       nome: nome.trim(),
       calorias_queimadas: Number(calorias),
       duracao_min: duracao ? Number(duracao) : null,
+      data: hojeBR(),
     });
 
     setSalvando(false);

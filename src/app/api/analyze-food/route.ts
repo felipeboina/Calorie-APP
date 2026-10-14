@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 
+export const maxDuration = 30;
+
 // Tentados em ordem; passa para o próximo se o modelo estiver sobrecarregado (503) ou descontinuado (404)
 const MODELOS = process.env.GEMINI_MODEL
   ? process.env.GEMINI_MODEL.split(",").map((m) => m.trim())

@@ -28,7 +28,10 @@ export default function SignupPage() {
     const { data, error } = await supabase.auth.signUp({
       email,
       password: senha,
-      options: { data: { nome } },
+      options: {
+        data: { nome },
+        emailRedirectTo: `${window.location.origin}/login`,
+      },
     });
 
     setCarregando(false);

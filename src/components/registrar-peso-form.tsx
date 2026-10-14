@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { hojeBR } from "@/lib/datas";
 
 export function RegistrarPesoForm({ pesoAtual }: { pesoAtual: number | null }) {
   const router = useRouter();
@@ -30,7 +31,7 @@ export function RegistrarPesoForm({ pesoAtual }: { pesoAtual: number | null }) {
       return;
     }
 
-    const hoje = new Date().toISOString().slice(0, 10);
+    const hoje = hojeBR();
 
     await supabase
       .from("weight_logs")

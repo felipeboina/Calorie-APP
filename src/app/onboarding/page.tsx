@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { hojeBR } from "@/lib/datas";
 import {
   calcularGastoTotal,
   calcularMacros,
@@ -87,7 +88,7 @@ export default function OnboardingPage() {
       {
         user_id: user.id,
         peso: pesoNum,
-        data: new Date().toISOString().slice(0, 10),
+        data: hojeBR(),
       },
       { onConflict: "user_id,data" }
     );

@@ -1,9 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { FoodLog, Profile } from "./types";
+import { hojeBR, somarDias } from "./datas";
 
-function hoje() {
-  return new Date().toISOString().slice(0, 10);
-}
+const hoje = hojeBR;
 
 export async function getProfile(supabase: SupabaseClient, userId: string) {
   const { data } = await supabase
@@ -24,7 +23,7 @@ export async function getLogsDoDia(
     .select("*")
     .eq("user_id", userId)
     .eq("data", data)
-    .order("horario", { ascending: true });
+    .order("created_at", { ascending: true });
   return (logs ?? []) as FoodLog[];
 }
 
@@ -83,14 +82,11 @@ export async function getWeightLogs(
   userId: string,
   dias = 60
 ) {
-  const desde = new Date();
-  desde.setDate(desde.getDate() - dias);
-
   const { data } = await supabase
     .from("weight_logs")
     .select("data, peso")
     .eq("user_id", userId)
-    .gte("data", desde.toISOString().slice(0, 10))
+    .gte("data", somarDias(hoje(), -dias))
     .order("data", { ascending: true });
 
   return (data ?? []) as { data: string; peso: number }[];
@@ -101,9 +97,7 @@ export async function getCaloriasPorDia(
   userId: string,
   dias = 7
 ) {
-  const desde = new Date();
-  desde.setDate(desde.getDate() - (dias - 1));
-  const desdeStr = desde.toISOString().slice(0, 10);
+  const desdeStr = somarDias(hoje(), -(dias - 1));
 
   const { data } = await supabase
     .from("food_logs")
@@ -113,9 +107,7 @@ export async function getCaloriasPorDia(
 
   const porDia = new Map<string, number>();
   for (let i = 0; i < dias; i++) {
-    const d = new Date(desde);
-    d.setDate(d.getDate() + i);
-    porDia.set(d.toISOString().slice(0, 10), 0);
+    porDia.set(somarDias(desdeStr, i), 0);
   }
   for (const log of data ?? []) {
     porDia.set(log.data, (porDia.get(log.data) ?? 0) + Number(log.calorias));
@@ -147,26 +139,15 @@ export async function getStreak(
   }
 
   let streak = 0;
-  const cursor = new Date();
-  // não penaliza o dia de hoje se ainda não fechou a meta
-  const hojeStr = hoje();
+  // o dia de hoje não conta nem quebra a sequência (ainda está em andamento)
+  let diaStr = somarDias(hoje(), -1);
 
   for (let i = 0; i < 365; i++) {
-    const diaStr = cursor.toISOString().slice(0, 10);
     const total = porDia.get(diaStr);
-
-    if (diaStr === hojeStr) {
-      cursor.setDate(cursor.getDate() - 1);
-      continue;
-    }
-
-    if (total === undefined) break;
-
-    const dentroDaMeta = total <= metaCalorica * 1.1;
-    if (!dentroDaMeta) break;
+    if (total === undefined || total > metaCalorica * 1.1) break;
 
     streak++;
-    cursor.setDate(cursor.getDate() - 1);
+    diaStr = somarDias(diaStr, -1);
   }
 
   return streak;
